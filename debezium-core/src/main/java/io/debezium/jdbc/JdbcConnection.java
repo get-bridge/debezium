@@ -5,6 +5,26 @@
  */
 package io.debezium.jdbc;
 
+import io.debezium.DebeziumException;
+import io.debezium.annotation.NotThreadSafe;
+import io.debezium.annotation.ThreadSafe;
+import io.debezium.config.CommonConnectorConfig;
+import io.debezium.config.Field;
+import io.debezium.relational.Attribute;
+import io.debezium.relational.Column;
+import io.debezium.relational.ColumnEditor;
+import io.debezium.relational.RelationalDatabaseConnectorConfig;
+import io.debezium.relational.Table;
+import io.debezium.relational.TableId;
+import io.debezium.relational.Tables;
+import io.debezium.relational.Tables.ColumnNameFilter;
+import io.debezium.relational.Tables.TableFilter;
+import io.debezium.util.BoundedConcurrentHashMap;
+import io.debezium.util.BoundedConcurrentHashMap.Eviction;
+import io.debezium.util.BoundedConcurrentHashMap.EvictionListener;
+import io.debezium.util.Collect;
+import io.debezium.util.ColumnUtils;
+import io.debezium.util.Strings;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -44,31 +64,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
-
 import org.apache.kafka.connect.errors.ConnectException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import io.debezium.DebeziumException;
-import io.debezium.annotation.NotThreadSafe;
-import io.debezium.annotation.ThreadSafe;
-import io.debezium.config.CommonConnectorConfig;
-import io.debezium.config.Field;
-import io.debezium.relational.Attribute;
-import io.debezium.relational.Column;
-import io.debezium.relational.ColumnEditor;
-import io.debezium.relational.RelationalDatabaseConnectorConfig;
-import io.debezium.relational.Table;
-import io.debezium.relational.TableId;
-import io.debezium.relational.Tables;
-import io.debezium.relational.Tables.ColumnNameFilter;
-import io.debezium.relational.Tables.TableFilter;
-import io.debezium.util.BoundedConcurrentHashMap;
-import io.debezium.util.BoundedConcurrentHashMap.Eviction;
-import io.debezium.util.BoundedConcurrentHashMap.EvictionListener;
-import io.debezium.util.Collect;
-import io.debezium.util.ColumnUtils;
-import io.debezium.util.Strings;
 
 /**
  * A utility that simplifies using a JDBC connection and executing transactions composed of multiple statements.
@@ -1164,6 +1162,14 @@ public class JdbcConnection implements AutoCloseable {
                     totalTables++;
                     TableId tableId = new TableId(catalogName, schemaName, tableName);
                     if (tableFilter == null || tableFilter.isIncluded(tableId)) {
+                        if (schemaNamePattern == null) {
+                            tableId = new TableId(
+                                    catalogName,
+                                    null,
+                                    tableName
+                            );
+                        }
+
                         tableIds.add(tableId);
                         attributesByTable.putAll(getAttributeDetails(tableId));
                     }
