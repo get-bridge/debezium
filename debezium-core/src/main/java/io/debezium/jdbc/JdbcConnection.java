@@ -5,6 +5,30 @@
  */
 package io.debezium.jdbc;
 
+import io.debezium.DebeziumException;
+import io.debezium.annotation.NotThreadSafe;
+import io.debezium.annotation.ThreadSafe;
+import io.debezium.config.CommonConnectorConfig;
+import io.debezium.config.Field;
+import io.debezium.pipeline.source.snapshot.incremental.ChunkQueryBuilder;
+import io.debezium.pipeline.source.snapshot.incremental.DefaultChunkQueryBuilder;
+import io.debezium.relational.Attribute;
+import io.debezium.relational.Column;
+import io.debezium.relational.ColumnEditor;
+import io.debezium.relational.RelationalDatabaseConnectorConfig;
+import io.debezium.relational.Table;
+import io.debezium.relational.TableId;
+import io.debezium.relational.Tables;
+import io.debezium.relational.Tables.ColumnNameFilter;
+import io.debezium.relational.Tables.TableFilter;
+import io.debezium.spi.schema.DataCollectionId;
+import io.debezium.util.BoundedConcurrentHashMap;
+import io.debezium.util.BoundedConcurrentHashMap.Eviction;
+import io.debezium.util.BoundedConcurrentHashMap.EvictionListener;
+import io.debezium.util.Collect;
+import io.debezium.util.ColumnUtils;
+import io.debezium.util.Strings;
+import io.debezium.util.Threads;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -42,36 +66,10 @@ import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.regex.Matcher;
 import java.util.stream.Collectors;
-
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import io.debezium.DebeziumException;
-import io.debezium.annotation.NotThreadSafe;
-import io.debezium.annotation.ThreadSafe;
-import io.debezium.config.CommonConnectorConfig;
-import io.debezium.config.Field;
-import io.debezium.pipeline.source.snapshot.incremental.ChunkQueryBuilder;
-import io.debezium.pipeline.source.snapshot.incremental.DefaultChunkQueryBuilder;
-import io.debezium.relational.Attribute;
-import io.debezium.relational.Column;
-import io.debezium.relational.ColumnEditor;
-import io.debezium.relational.RelationalDatabaseConnectorConfig;
-import io.debezium.relational.Table;
-import io.debezium.relational.TableId;
-import io.debezium.relational.Tables;
-import io.debezium.relational.Tables.ColumnNameFilter;
-import io.debezium.relational.Tables.TableFilter;
-import io.debezium.spi.schema.DataCollectionId;
-import io.debezium.util.BoundedConcurrentHashMap;
-import io.debezium.util.BoundedConcurrentHashMap.Eviction;
-import io.debezium.util.BoundedConcurrentHashMap.EvictionListener;
-import io.debezium.util.Collect;
-import io.debezium.util.ColumnUtils;
-import io.debezium.util.Strings;
-import io.debezium.util.Threads;
 
 /**
  * A utility that simplifies using a JDBC connection and executing transactions composed of multiple statements.
@@ -1212,6 +1210,13 @@ public class JdbcConnection implements AutoCloseable {
                     totalTables++;
                     TableId tableId = createTableId(metaCatalogName, metaSchemaName, metaTableName);
                     if (tableFilter == null || tableFilter.isIncluded(tableId)) {
+                        if (schemaNamePattern == null) {
+                            tableId = new TableId(
+                                    metaCatalogName,
+                                    null,
+                                    metaTableName);
+                        }
+
                         tableIds.add(tableId);
                         attributesByTable.putAll(getAttributeDetails(tableId, tableType));
                     }
