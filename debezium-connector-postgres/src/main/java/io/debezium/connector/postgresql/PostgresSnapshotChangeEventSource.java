@@ -5,17 +5,6 @@
  */
 package io.debezium.connector.postgresql;
 
-import java.sql.SQLException;
-import java.time.Duration;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-import java.util.stream.Collectors;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import io.debezium.connector.postgresql.PostgresOffsetContext.Loader;
 import io.debezium.connector.postgresql.connection.Lsn;
 import io.debezium.connector.postgresql.connection.PostgresConnection;
@@ -34,6 +23,15 @@ import io.debezium.schema.SchemaChangeEvent;
 import io.debezium.snapshot.SnapshotterService;
 import io.debezium.spi.schema.DataCollectionId;
 import io.debezium.util.Clock;
+import java.sql.SQLException;
+import java.time.Duration;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class PostgresSnapshotChangeEventSource extends RelationalSnapshotChangeEventSource<PostgresPartition, PostgresOffsetContext> {
 

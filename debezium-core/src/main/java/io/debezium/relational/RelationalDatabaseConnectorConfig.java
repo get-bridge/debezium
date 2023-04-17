@@ -5,21 +5,6 @@
  */
 package io.debezium.relational;
 
-import java.math.BigDecimal;
-import java.time.Duration;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.TimeUnit;
-import java.util.regex.Pattern;
-
-import org.apache.kafka.common.config.ConfigDef.Importance;
-import org.apache.kafka.common.config.ConfigDef.Type;
-import org.apache.kafka.common.config.ConfigDef.Width;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import io.debezium.config.CommonConnectorConfig;
 import io.debezium.config.ConfigDefinition;
 import io.debezium.config.Configuration;
@@ -41,6 +26,19 @@ import io.debezium.schema.FieldNameSelector;
 import io.debezium.schema.FieldNameSelector.FieldNamer;
 import io.debezium.spi.schema.DataCollectionId;
 import io.debezium.util.Strings;
+import java.math.BigDecimal;
+import java.time.Duration;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
+import java.util.regex.Pattern;
+import org.apache.kafka.common.config.ConfigDef.Importance;
+import org.apache.kafka.common.config.ConfigDef.Type;
+import org.apache.kafka.common.config.ConfigDef.Width;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Configuration options shared across the relational CDC connectors.
@@ -392,6 +390,16 @@ public abstract class RelationalDatabaseConnectorConfig extends CommonConnectorC
             .withInvisibleRecommender()
             .withDescription("The schemas for which events must not be captured");
 
+    public static final Field SCHEMA_SAME_STRUCTURE_REGEX = Field.create("schema.same.structure.regex")
+            .withDisplayName("Regex for schemas with same structure")
+            .withType(Type.STRING)
+            .withGroup(Field.createGroupEntry(Field.Group.FILTERS))
+            .withWidth(Width.MEDIUM)
+            .withImportance(Importance.MEDIUM)
+            .withDescription("For the schema names that match this regex structure will be considered the same. " +
+                    "The schema of a previously scanned schema matching this regex will be used when a new schema matching the regex is found. " +
+                    "This is quite bit useful for performance purposes if you have made the wonderful and wondrous choice to use schemas for multi-tenancy.");
+
     /**
      * A comma-separated list of regular expressions that match database names to be monitored.
      * Must not be used with {@link #DATABASE_EXCLUDE_LIST}.
@@ -553,6 +561,7 @@ public abstract class RelationalDatabaseConnectorConfig extends CommonConnectorC
                     TABLE_IGNORE_BUILTIN,
                     SCHEMA_INCLUDE_LIST,
                     SCHEMA_EXCLUDE_LIST,
+                    SCHEMA_SAME_STRUCTURE_REGEX,
                     MSG_KEY_COLUMNS,
                     SNAPSHOT_SELECT_STATEMENT_OVERRIDES_BY_TABLE,
                     MASK_COLUMN_WITH_HASH,
@@ -676,6 +685,10 @@ public abstract class RelationalDatabaseConnectorConfig extends CommonConnectorC
 
     public String tableIncludeList() {
         return getConfig().getString(TABLE_INCLUDE_LIST);
+    }
+
+    public String schemaSameStructureRegex() {
+        return getConfig().getString(SCHEMA_SAME_STRUCTURE_REGEX);
     }
 
     public ColumnNameFilter getColumnFilter() {

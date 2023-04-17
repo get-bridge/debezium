@@ -5,6 +5,30 @@
  */
 package io.debezium.jdbc;
 
+import io.debezium.DebeziumException;
+import io.debezium.annotation.NotThreadSafe;
+import io.debezium.annotation.ThreadSafe;
+import io.debezium.config.CommonConnectorConfig;
+import io.debezium.config.Field;
+import io.debezium.pipeline.source.snapshot.incremental.ChunkQueryBuilder;
+import io.debezium.pipeline.source.snapshot.incremental.DefaultChunkQueryBuilder;
+import io.debezium.relational.Attribute;
+import io.debezium.relational.Column;
+import io.debezium.relational.ColumnEditor;
+import io.debezium.relational.RelationalDatabaseConnectorConfig;
+import io.debezium.relational.Table;
+import io.debezium.relational.TableId;
+import io.debezium.relational.Tables;
+import io.debezium.relational.Tables.ColumnNameFilter;
+import io.debezium.relational.Tables.TableFilter;
+import io.debezium.spi.schema.DataCollectionId;
+import io.debezium.util.BoundedConcurrentHashMap;
+import io.debezium.util.BoundedConcurrentHashMap.Eviction;
+import io.debezium.util.BoundedConcurrentHashMap.EvictionListener;
+import io.debezium.util.Collect;
+import io.debezium.util.ColumnUtils;
+import io.debezium.util.Strings;
+import io.debezium.util.Threads;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -42,36 +66,10 @@ import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.regex.Matcher;
 import java.util.stream.Collectors;
-
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import io.debezium.DebeziumException;
-import io.debezium.annotation.NotThreadSafe;
-import io.debezium.annotation.ThreadSafe;
-import io.debezium.config.CommonConnectorConfig;
-import io.debezium.config.Field;
-import io.debezium.pipeline.source.snapshot.incremental.ChunkQueryBuilder;
-import io.debezium.pipeline.source.snapshot.incremental.DefaultChunkQueryBuilder;
-import io.debezium.relational.Attribute;
-import io.debezium.relational.Column;
-import io.debezium.relational.ColumnEditor;
-import io.debezium.relational.RelationalDatabaseConnectorConfig;
-import io.debezium.relational.Table;
-import io.debezium.relational.TableId;
-import io.debezium.relational.Tables;
-import io.debezium.relational.Tables.ColumnNameFilter;
-import io.debezium.relational.Tables.TableFilter;
-import io.debezium.spi.schema.DataCollectionId;
-import io.debezium.util.BoundedConcurrentHashMap;
-import io.debezium.util.BoundedConcurrentHashMap.Eviction;
-import io.debezium.util.BoundedConcurrentHashMap.EvictionListener;
-import io.debezium.util.Collect;
-import io.debezium.util.ColumnUtils;
-import io.debezium.util.Strings;
-import io.debezium.util.Threads;
 
 /**
  * A utility that simplifies using a JDBC connection and executing transactions composed of multiple statements.
@@ -1232,19 +1230,76 @@ public class JdbcConnection implements AutoCloseable {
         }
         LOGGER.debug("{} table(s) will be scanned", tableIds.size());
 
+        String schemaSameStructureRegex = "^(?!(?:_v|dms_pgctrl|pglogical)$).*";
+        String sameStructureReferenceSchema;
+        Set<TableId> tableIdsToRead = new HashSet<>();
+        Set<TableId> tableIdsToClone = new HashSet<>();
+
+        if (schemaSameStructureRegex != null) {
+            LOGGER.debug("Applying schema same structure regex filter: {}", schemaSameStructureRegex);
+
+            Map<String, List<TableId>> tablesBySchema = tableIds.stream().collect(Collectors.groupingBy(TableId::schema));
+            Map<String, List<TableId>> sameSchemaTableIds = new HashMap<>();
+            Map<String, List<TableId>> uniqueSchemaTableIds = new HashMap<>();
+
+            for (var entry : tablesBySchema.entrySet()) {
+                if (entry.getKey().matches(schemaSameStructureRegex)) {
+                    sameSchemaTableIds.put(entry.getKey(), entry.getValue());
+                } else {
+                    uniqueSchemaTableIds.put(entry.getKey(), entry.getValue());
+                }
+            }
+
+            LOGGER.debug("Found {} table(s) with same structure", sameSchemaTableIds.size());
+
+            if (!uniqueSchemaTableIds.isEmpty()) {
+                LOGGER.debug("Unique schemas: {}",  String.join(", ", uniqueSchemaTableIds.keySet()));
+
+                for (List<TableId> ids : uniqueSchemaTableIds.values()) {
+                    tableIdsToRead.addAll(ids);
+                }
+            }
+
+            if (!sameSchemaTableIds.isEmpty()) {
+                LOGGER.debug("Same schemas: {}",  String.join(", ", sameSchemaTableIds.keySet()));
+
+                Entry<String, List<TableId>> reference = sameSchemaTableIds.entrySet().iterator().next();
+
+                LOGGER.debug("Will use {} as a reference for same structure schemas",  reference.getKey());
+                sameStructureReferenceSchema = reference.getKey();
+
+                tableIdsToRead.addAll(reference.getValue());
+                sameSchemaTableIds.remove(reference.getKey());
+            }
+            else {
+                sameStructureReferenceSchema = null;
+                LOGGER.debug("Haven't found schemas with the same database structure.");
+            }
+
+            for (List<TableId> ids : sameSchemaTableIds.values()) {
+                tableIdsToClone.addAll(ids);
+            }
+
+            LOGGER.debug("Will clone {} table(s)", tableIdsToClone.size());
+        }
+        else {
+            sameStructureReferenceSchema = null;
+            tableIdsToRead = tableIds;
+        }
+
         Map<TableId, List<Column>> columnsByTable = new HashMap<>();
 
-        if (totalTables == tableIds.size() || config.getBoolean(RelationalDatabaseConnectorConfig.SNAPSHOT_FULL_COLUMN_SCAN_FORCE)) {
+        if (totalTables == tableIdsToRead.size() || config.getBoolean(RelationalDatabaseConnectorConfig.SNAPSHOT_FULL_COLUMN_SCAN_FORCE)) {
             columnsByTable = getColumnsDetails(catalogName, schemaName, null, tableFilter, columnFilter, metadata, viewIds);
             if (columnsByTable.isEmpty()) {
-                for (TableId emptyTableId : tableIds) {
+                for (TableId emptyTableId : tableIdsToRead) {
                     LOGGER.warn("Table {} has no column or all columns were excluded due to include/exclude lists.", emptyTableId);
                     columnsByTable.put(emptyTableId, new ArrayList<>());
                 }
             }
         }
         else {
-            for (TableId includeTable : tableIds) {
+            for (TableId includeTable : tableIdsToRead) {
                 LOGGER.debug("Retrieving columns of table {}", includeTable);
 
                 Map<TableId, List<Column>> cols = getColumnsDetails(catalogName, schemaName, includeTable.table(), tableFilter,
@@ -1264,6 +1319,18 @@ public class JdbcConnection implements AutoCloseable {
             String defaultCharsetName = null; // JDBC does not expose character sets
             List<Attribute> attributes = attributesByTable.getOrDefault(tableEntry.getKey(), Collections.emptyList());
             tables.overwriteTable(tableEntry.getKey(), columns, pkColumnNames, defaultCharsetName, attributes);
+        }
+
+        if (!tableIdsToClone.isEmpty() && sameStructureReferenceSchema != null) {
+            for (TableId id : tableIdsToClone) {
+                Table readTable = tables.forTable(id.catalog(), sameStructureReferenceSchema, id.table());
+                if (readTable != null) {
+                    LOGGER.debug("Cloning {} from {}...", id.identifier(), readTable.id().identifier());
+                    tables.overwriteTable(id, readTable.columns(), readTable.primaryKeyColumnNames(), readTable.defaultCharsetName(), readTable.attributes());
+                } else {
+                    LOGGER.error("Table {} couldn't be cloned from schema {}", id.identifier(), sameStructureReferenceSchema);
+                }
+            }
         }
 
         if (removeTablesNotFoundInJdbc) {
