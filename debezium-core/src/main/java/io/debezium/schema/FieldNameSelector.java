@@ -17,11 +17,13 @@ import io.debezium.util.BoundedConcurrentHashMap.Eviction;
 public class FieldNameSelector {
 
     public static FieldNamer<Column> defaultSelector(SchemaNameAdjuster fieldNameAdjuster) {
-        return new FieldNameCache<>(new FieldNameSanitizer<>(Column::name, fieldNameAdjuster));
+        // return new FieldNameCache<>(new FieldNameSanitizer<>(Column::name, fieldNameAdjuster));
+        return new FieldNameSanitizer<>(Column::name, fieldNameAdjuster);
     }
 
     public static FieldNamer<String> defaultNonRelationalSelector(SchemaNameAdjuster fieldNameAdjuster) {
-        return new FieldNameCache<>(new FieldNameSanitizer<>((x) -> x, fieldNameAdjuster));
+        // return new FieldNameCache<>(new FieldNameSanitizer<>((x) -> x, fieldNameAdjuster));
+        return new FieldNameSanitizer<>((x) -> x, fieldNameAdjuster);
     }
 
     /**
