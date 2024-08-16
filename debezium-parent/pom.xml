@@ -101,22 +101,6 @@
                     <version>${version.protoc.maven.plugin}</version>
                 </plugin>
                 <plugin>
-                    <groupId>net.revelc.code.formatter</groupId>
-                    <artifactId>formatter-maven-plugin</artifactId>
-                    <version>${version.code.formatter}</version>
-                    <dependencies>
-                        <dependency>
-                            <groupId>io.debezium</groupId>
-                            <artifactId>debezium-ide-configs</artifactId>
-                            <version>${project.version}</version>
-                        </dependency>
-                    </dependencies>
-                    <configuration>
-                        <configFile>/eclipse/debezium-formatter.xml</configFile>
-                        <skip>${format.skip}</skip>
-                    </configuration>
-                </plugin>
-                <plugin>
                     <groupId>net.revelc.code</groupId>
                     <artifactId>impsort-maven-plugin</artifactId>
                     <version>${version.impsort}</version>
@@ -248,18 +232,6 @@
             </activation>
             <build>
                 <plugins>
-                    <plugin>
-                        <groupId>net.revelc.code.formatter</groupId>
-                        <artifactId>formatter-maven-plugin</artifactId>
-                        <executions>
-                            <execution>
-                                <phase>process-sources</phase>
-                                <goals>
-                                    <goal>${format.formatter.goal}</goal>
-                                </goals>
-                            </execution>
-                        </executions>
-                    </plugin>
                     <plugin>
                         <groupId>net.revelc.code</groupId>
                         <artifactId>impsort-maven-plugin</artifactId>
