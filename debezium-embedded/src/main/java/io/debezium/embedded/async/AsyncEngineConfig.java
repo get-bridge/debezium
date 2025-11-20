@@ -22,7 +22,7 @@ public interface AsyncEngineConfig extends EmbeddedEngineConfig {
     // shutdown we have to use bigger timeout. In the past DEFAULT_EXECUTOR_SHUTDOWN_TIMEOUT was 90 seconds, and we doubled this interval, so we waited for 3 minutes.
     // As the DEFAULT_EXECUTOR_SHUTDOWN_TIMEOUT was decreased substantially, let's use multiple of 10 of this interval, and eventually increase it again in the future
     // if it turns out it's still not sufficient shut down all the tasks gracefully.
-    long DEFAULT_TASK_MANAGEMENT_TIMEOUT_MS = 10 * CommonConnectorConfig.DEFAULT_EXECUTOR_SHUTDOWN_TIMEOUT.toMillis();
+    long DEFAULT_TASK_MANAGEMENT_TIMEOUT_MS = 60 * CommonConnectorConfig.DEFAULT_EXECUTOR_SHUTDOWN_TIMEOUT.toMillis();
 
     /**
      * An optional field that specifies the number of threads to be used for processing CDC records.
