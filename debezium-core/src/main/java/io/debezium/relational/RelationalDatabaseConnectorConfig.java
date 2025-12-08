@@ -396,6 +396,7 @@ public abstract class RelationalDatabaseConnectorConfig extends CommonConnectorC
             .withGroup(Field.createGroupEntry(Field.Group.FILTERS))
             .withWidth(Width.MEDIUM)
             .withImportance(Importance.MEDIUM)
+            .withDefault("^(?!(?:_v|dms_pgctrl|pglogical)$).*")
             .withDescription("For the schema names that match this regex structure will be considered the same. " +
                     "The schema of a previously scanned schema matching this regex will be used when a new schema matching the regex is found. " +
                     "This is quite bit useful for performance purposes if you have made the wonderful and wondrous choice to use schemas for multi-tenancy.");

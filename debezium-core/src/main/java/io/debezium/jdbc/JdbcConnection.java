@@ -1230,7 +1230,7 @@ public class JdbcConnection implements AutoCloseable {
         }
         LOGGER.debug("{} table(s) will be scanned", tableIds.size());
 
-        String schemaSameStructureRegex = "^(?!(?:_v|dms_pgctrl|pglogical)$).*";
+        String schemaSameStructureRegex = config.getString(RelationalDatabaseConnectorConfig.SCHEMA_SAME_STRUCTURE_REGEX);
         String sameStructureReferenceSchema;
         Set<TableId> tableIdsToRead = new HashSet<>();
         Set<TableId> tableIdsToClone = new HashSet<>();
